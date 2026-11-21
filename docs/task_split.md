@@ -79,7 +79,6 @@ Los resultados de cada punto se guardan en `results/<kind>_d<d>.json` (θ óptim
 ## Fase 0: los tres juntos (~1 h)
 
 - [ ] Instalar el entorno local: `pip install qiskit qiskit-aer pyscf qiskit-nature` (más lo que pida `ruido.py`). Probar que corra `import pyscf, qiskit_aer`. **Anotar las versiones exactas** (`pip freeze`) para fijarlas en la celda de instalación de Colab, así el jurado corre lo mismo que nosotros.
-- [ ] Conseguir `ruido.py` de los organizadores y guardarlo en `src/`.
 - [ ] Crear la estructura `src/`, `notebooks/`, `results/` y los archivos con las **firmas vacías** de arriba (stubs que devuelvan `NotImplemented`). A partir de acá cada uno trabaja en lo suyo.
 - [ ] Leer juntos las secciones 0, 4 y 8 de [theory_notes.md](theory_notes.md).
 
@@ -150,7 +149,7 @@ Para empezar sin esperar a nadie: probar con un circuito cualquiera de 8 qubits 
 
 | Extra | Quién lo agarra naturalmente |
 |---|---|
-| Ruido de `ruido.py` y `FakeFez` | Maxi |
+| Escribir `src/ruido.py` (modelo de ruido con `qiskit_aer.noise`: `cz`, `sx`, `x`, `rz`, línea, 0,1 % por `cz`, 0,005 % por compuerta de un qubit) y correr la curva con él y con `FakeFez` | Maxi |
 | ZNE y mitigación de readout | Maxi + Fede (necesita plegar `cz` en el circuito) |
 | Menos qubits (tapering a 6) | Gonza |
 | Comparar ansätze | Fede |
