@@ -30,7 +30,6 @@ El jurado abre el notebook en Colab desde la carpeta de Drive y lo corre de punt
 - Reglas para que esto funcione:
   - Cada `.py` importa solo librerías externas (`qiskit`, `pyscf`, `numpy`...), **nunca** `from src.x import ...`. En el notebook todo queda en el mismo namespace.
   - El orden de las celdas es el de las dependencias: `hamiltonian.py` → `ansatz.py` → `vqe.py` → `measurement.py` → `analysis.py`.
-  - `ruido.py` también se pega como celda, o se descarga en la celda de instalación si los organizadores lo publican con una URL.
   - Nada de rutas locales. Si se cachean resultados (θ óptimos), el cache va **dentro del notebook** (un dict en una celda) o se recalcula. Lo más seguro es que el notebook recalcule todo.
 - **El tiempo de ejecución en Colab importa**: optimizar 12 a 15 puntos más las mediciones tiene que terminar en un tiempo razonable en el runtime gratis. Midan cuánto tarda cada pieza desde el principio.
 
@@ -78,7 +77,7 @@ Los resultados de cada punto se guardan en `results/<kind>_d<d>.json` (θ óptim
 
 ## Fase 0: los tres juntos (~1 h)
 
-- [ ] Instalar el entorno local: `pip install qiskit qiskit-aer pyscf qiskit-nature` (más lo que pida `ruido.py`). Probar que corra `import pyscf, qiskit_aer`. **Anotar las versiones exactas** (`pip freeze`) para fijarlas en la celda de instalación de Colab, así el jurado corre lo mismo que nosotros.
+- [ ] Instalar el entorno local: `pip install qiskit qiskit-aer pyscf qiskit-nature`. Probar que corra `import pyscf, qiskit_aer`. **Anotar las versiones exactas** (`pip freeze`) para fijarlas en la celda de instalación de Colab, así el jurado corre lo mismo que nosotros.
 - [ ] Crear la estructura `src/`, `notebooks/`, `results/` y los archivos con las **firmas vacías** de arriba (stubs que devuelvan `NotImplemented`). A partir de acá cada uno trabaja en lo suyo.
 - [ ] Leer juntos las secciones 0, 4 y 8 de [theory_notes.md](theory_notes.md).
 
@@ -95,8 +94,6 @@ Los resultados de cada punto se guardan en `results/<kind>_d<d>.json` (θ óptim
 5. [ ] Gráfico de referencia: HF, CCSD y FCI vs `d`, y el error de CCSD en mHa vs `d` con la línea de 1,6 mHa. Así sabemos **cuánto hay que ganarle a CCSD** en cada punto.
 6. [ ] Tabla de los coeficientes $c_k$ del hamiltoniano: cuántos términos hay, cuántos grupos que conmutan y cómo se distribuyen los $|c_k|$. Se la pasa a Maxi para repartir los shots.
 
-**Después (extras)**: reducir a 6 qubits con el mapeo de paridad y tapering (extra "menos qubits"), y otra geometría de H₄ (extra "otra geometría").
-
 ---
 
 ## Fede: el ansatz y la optimización (sin ruido)
@@ -112,13 +109,11 @@ Mientras Gonza termina el paso 1, se puede practicar con H₂ del notebook de qu
 5. [ ] Probar al menos un ansatz más barato y comparar precisión contra `cz`: hardware-efficient, k-UpCCGSD o ADAPT-VQE. **La meta es la misma precisión con muchas menos `cz`.**
 6. [ ] Anotar qué optimizadores se probaron y cuál anduvo (el jurado quiere ver "qué no funcionó").
 
-**Después (extras)**: tabla comparativa de ansätze (extra "comparar ansätze").
-
 ---
 
 ## Maxi: medición, estadística y entrega
 
-**Leer**: apunte, secciones 2, 9, 10 y 11; [Clase 2, Parte 2](../workshops/Clase_2,_Parte_2_Computación_Cuántica.ipynb), ejercicios 11 a 14 (Sampler, Estimator, mitigación).
+**Leer**: apunte, secciones 2, 9 y 11; [Clase 2, Parte 2](../workshops/Clase_2,_Parte_2_Computación_Cuántica.ipynb), ejercicios 11 a 13 (Sampler y Estimator).
 
 Para empezar sin esperar a nadie: probar con un circuito cualquiera de 8 qubits y un `SparsePauliOp` inventado.
 
@@ -134,8 +129,6 @@ Para empezar sin esperar a nadie: probar con un circuito cualquiera de 8 qubits 
 7. [ ] **Probarlo en Colab de verdad lo antes posible**, aunque sea con los stubs: subir el `.ipynb` generado, `Entorno de ejecución > Reiniciar y ejecutar todo`, y anotar el tiempo total. Repetirlo cada vez que se integra algo grande.
 8. [ ] Al final: carpeta de Google Drive compartida con el jurado, con el notebook dentro y probado desde esa copia.
 
-**Después (extras)**: curva con el ruido de `ruido.py`, y ZNE más mitigación de readout.
-
 ---
 
 ## Fase 2: integración (los tres)
@@ -145,16 +138,9 @@ Para empezar sin esperar a nadie: probar con un circuito cualquiera de 8 qubits 
 - [ ] Decidir juntos el ansatz final y el presupuesto de shots por punto.
 - [ ] Escribir la parte de "qué decidimos, por qué y qué no funcionó". Cada uno escribe su parte y Maxi la junta.
 
-## Fase 3: extras (elegir según el tiempo)
+## Fuera de alcance
 
-| Extra | Quién lo agarra naturalmente |
-|---|---|
-| Escribir `src/ruido.py` (modelo de ruido con `qiskit_aer.noise`: `cz`, `sx`, `x`, `rz`, línea, 0,1 % por `cz`, 0,005 % por compuerta de un qubit) y correr la curva con él y con `FakeFez` | Maxi |
-| ZNE y mitigación de readout | Maxi + Fede (necesita plegar `cz` en el circuito) |
-| Menos qubits (tapering a 6) | Gonza |
-| Comparar ansätze | Fede |
-| Otra geometría | Gonza |
-| VQE vs SQD | quien termine primero |
+No hacemos ninguno de los extras de la sección 5 de la consigna: ni ruido (`ruido.py`, `FakeFez`), ni mitigación (ZNE, readout), ni menos qubits, ni comparación formal de ansätze, ni SQD, ni otra geometría. Todo es sin ruido, con 8 qubits y H₄ lineal.
 
 ## Puntos de control
 
@@ -162,4 +148,4 @@ Para empezar sin esperar a nadie: probar con un circuito cualquiera de 8 qubits 
 2. **`build_problem` validado contra FCI.** Gonza → desbloquea a Fede.
 3. **UCCSD le gana a CCSD a 2,4 Å sin ruido.** Fede → confirma que el plan anda.
 4. **$E \pm \sigma$ con $\sigma$ validada.** Maxi.
-5. **Curva completa con tabla.** Los tres → el desafío central está cumplido; de ahí en más todo es mejora.
+5. **Curva completa con tabla, en el notebook de Colab.** Los tres → el desafío está cumplido. Lo que queda es pulir la precisión, el presupuesto de shots y las explicaciones.
