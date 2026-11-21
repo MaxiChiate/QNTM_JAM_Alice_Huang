@@ -21,11 +21,10 @@ for path in sorted(glob.glob(str(root / "results" / "*.json")) + glob.glob(str(r
     methods[label][row["d"]] = row
 
 fig, (ax, ax_cz) = plt.subplots(1, 2, figsize=(13, 5))
-floor = 1e-4  # mHa; por debajo el error es ruido numérico y no se puede graficar en escala log
 ccsd = {}
 for label, rows in methods.items():
     ds = sorted(rows)
-    err = [max(1000 * abs(rows[d]["e_exact"] - rows[d]["e_fci"]), floor) for d in ds]
+    err = [1000 * abs(rows[d]["e_exact"] - rows[d]["e_fci"]) for d in ds]
     ax.plot(ds, err, "o-", label=label, ms=4)
     ax_cz.plot(ds, [rows[d]["cz"] for d in ds], "o-", label=label, ms=4)
     for d in ds:
@@ -33,11 +32,11 @@ for label, rows in methods.items():
 
 if ccsd:
     ds = sorted(ccsd)
-    ax.plot(ds, [max(ccsd[d], floor) for d in ds], "k--", label="CCSD")
+    ax.plot(ds, [ccsd[d] for d in ds], "k--", label="CCSD")
 ax.axhline(1.6, color="gray", ls=":", label="precisión química (1,6 mHa)")
 ax.axvspan(1.8, 3.0, color="orange", alpha=0.08, label="d ≥ 1,8 Å")
-ax.set(yscale="log", xlabel="d (Å)", ylabel="|E − E_FCI| (mHa)", title=f"Error contra FCI (piso del gráfico: {floor:g} mHa)")
-ax.legend(fontsize=8)
+ax.set(yscale="log", xlabel="d (Å)", ylabel="|E − E_FCI| (mHa)", title="Error contra FCI")
+ax.legend(fontsize=8, loc="center right", bbox_to_anchor=(1, 0.3))  # zona vacía, no tapa curvas
 ax_cz.set(xlabel="d (Å)", ylabel="compuertas cz", title="Costo en cz")
 ax_cz.legend(fontsize=8)
 for a in (ax, ax_cz):
