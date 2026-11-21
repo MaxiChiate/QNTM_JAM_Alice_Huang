@@ -12,6 +12,14 @@ Extras:
     compare_allocations   uniform vs |c_k|-weighted vs adaptive shot allocation
     measure_reliability   <N>, <S²> and Var(H) = <H²> - <H>², measured with shots
 
+Noise (`noise=`, optional): a dict describing a noisy device, built by noise.py:
+    {"noise_model": NoiseModel, "basis_gates": [...], "coupling_map": CouplingMap or None,
+     "backend": backend to transpile against or None, "initial_layout": [...] or None}
+The measurement circuits are transpiled to that device and simulated with the
+noise model (density matrix). `fold=k` (odd) repeats every two-qubit gate k times
+after transpiling, which multiplies its noise by ~k: this is the noise scaling
+used by zero-noise extrapolation (ZNE).
+
 Shot allocation strategies (`allocation=`):
     "uniform"   same number of shots for every qubit-wise commuting group
     "weighted"  shots proportional to sum_k |c_k| over the group
@@ -113,6 +121,50 @@ def _distribute(total, scores):
     return shots + MIN_SHOTS_PER_GROUP
 
 
+def fold_two_qubit_gates(circuit, fold: int):
+    """Replace every two-qubit gate G by G (G† G)^((fold-1)/2). Same unitary, ~fold times the noise.
+
+    Must be applied after the last transpile, or the optimizer cancels the pairs.
+    """
+    if fold == 1:
+        return circuit
+    if fold < 1 or fold % 2 == 0:
+        raise ValueError(f"fold must be an odd integer >= 1, got {fold}")
+    folded = circuit.copy_empty_like()
+    for inst in circuit.data:
+        folded.append(inst)
+        if inst.operation.num_qubits == 2 and inst.operation.name not in ("barrier", "measure"):
+            inverse = inst.operation.inverse()
+            for _ in range((fold - 1) // 2):
+                folded.append(inverse, inst.qubits, inst.clbits)
+                folded.append(inst.operation, inst.qubits, inst.clbits)
+    return folded
+
+
+def _prepare_circuits(circuits, noise, fold):
+    """Transpile the measurement circuits for the (noisy) device and apply the folding."""
+    if noise is None:
+        if fold != 1:
+            raise ValueError("fold only makes sense with a noise model")
+        return transpile(circuits, AerSimulator())
+    transpiled = transpile(circuits, backend=noise.get("backend"),
+                           basis_gates=None if noise.get("backend") else noise["basis_gates"],
+                           coupling_map=None if noise.get("backend") else noise.get("coupling_map"),
+                           initial_layout=noise.get("initial_layout"),
+                           optimization_level=1, seed_transpiler=0)
+    return [fold_two_qubit_gates(qc, fold) for qc in transpiled]
+
+
+def _sampler(noise, seed):
+    backend_options = {}
+    if noise is not None:
+        backend_options["noise_model"] = noise["noise_model"]
+        backend_options["method"] = "density_matrix"   # exact noisy distribution, then sample
+    if seed is not None:
+        backend_options["seed_simulator"] = int(seed)
+    return SamplerV2(options={"backend_options": backend_options}) if backend_options else SamplerV2()
+
+
 def _run(sampler, circuits, shots):
     """One SamplerV2 job with a different number of shots per circuit; returns a list of counts."""
     pubs = [(qc, None, int(s)) for qc, s in zip(circuits, shots)]
@@ -124,7 +176,7 @@ def _run(sampler, circuits, shots):
 # Measurement
 # --------------------------------------------------------------------------
 def measure_expectation(circuit, theta, operator, total_shots: int,
-                        allocation: str = "weighted", seed=None) -> dict:
+                        allocation: str = "weighted", seed=None, noise=None, fold: int = 1) -> dict:
     """Estimate <operator> with `total_shots` shots spread over qubit-wise commuting groups.
 
     The sigma accounts for the covariances inside each group exactly, because the
@@ -144,16 +196,13 @@ def measure_expectation(circuit, theta, operator, total_shots: int,
                 "allocation": allocation, "groups": []}
 
     groups = rest.group_commuting(qubit_wise=True)
-    backend = AerSimulator()
-    circuits = transpile([_measurement_circuit(qc, _group_basis(g)) for g in groups], backend)
+    circuits = _prepare_circuits([_measurement_circuit(qc, _group_basis(g)) for g in groups], noise, fold)
     # Aer seeds the i-th circuit of a job with seed_simulator + i, so nearby user seeds
     # would reuse random streams across calls. Derive well-separated job seeds instead.
     job_seeds = np.random.SeedSequence(seed).generate_state(2) if seed is not None else None
 
     def sampler_for(job):
-        if job_seeds is None:
-            return SamplerV2()
-        return SamplerV2(options={"backend_options": {"seed_simulator": int(job_seeds[job])}})
+        return _sampler(noise, None if job_seeds is None else job_seeds[job])
 
     sampler = sampler_for(0)
 
@@ -198,20 +247,22 @@ def measure_expectation(circuit, theta, operator, total_shots: int,
         "shots": int(sum(d["shots"] for d in details)),
         "n_groups": len(groups),
         "allocation": allocation,
+        "fold": fold,
         "groups": details,
     }
 
 
 def measure_energy(circuit, theta, hamiltonian, total_shots: int,
-                   allocation: str = "weighted", seed=None) -> dict:
+                   allocation: str = "weighted", seed=None, noise=None, fold: int = 1) -> dict:
     """Devuelve {"energy": float, "sigma": float, "shots": int}.
 
     Groups the Pauli terms into qubit-wise commuting sets, measures one circuit
     per group (shots split according to `allocation`) and returns the energy
     estimate with its statistical standard error. The identity term is added
-    exactly and costs no shots.
+    exactly and costs no shots. With `noise` the circuits run on a noisy simulated
+    device, and `fold` scales its two-qubit noise (see the module docstring).
     """
-    r = measure_expectation(circuit, theta, hamiltonian, total_shots, allocation, seed)
+    r = measure_expectation(circuit, theta, hamiltonian, total_shots, allocation, seed, noise, fold)
     return {"energy": r["energy"], "sigma": r["sigma"], "shots": r["shots"]}
 
 
