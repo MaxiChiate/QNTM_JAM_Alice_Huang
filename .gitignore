@@ -31,3 +31,6 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .ipynb_checkpoints/
+
+# Clean environment for tools/run_clean.py
+.colab_env/

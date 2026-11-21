@@ -271,6 +271,7 @@ def report(records, method: str = "spline"):
     plot_curve(records, axes[0])
     plot_errors(records, axes[1])
     fig.tight_layout()
+    plt.close(fig)   # do not auto-display here; show it with out["figure"]
     check = beats_ccsd(records)
     return {"table": table, "summary": summary(records, method=method),
             "beats_ccsd": check, "figure": fig}
