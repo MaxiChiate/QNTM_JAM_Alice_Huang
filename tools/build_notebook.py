@@ -164,11 +164,17 @@ def build() -> nbformat.NotebookNode:
             continue
         with open(src_path, encoding="utf-8") as f:
             code = strip_main_blocks(f.read())
-        header = f"# ---- {source} ----\n"
+        # "@title" + cellView "form" collapses the code in Colab; source_hidden does it in
+        # VS Code / Jupyter. The results stay visible and the code opens with one click.
+        header = f"# @title {source}\n"
         chunks = split_cells(code, CODE_SPLIT)
         if chunks:
             chunks[0] = header + chunks[0]
-        cells += [new_code_cell(c) for c in chunks]
+        for c in chunks:
+            cell = new_code_cell(c)
+            cell.metadata["cellView"] = "form"
+            cell.metadata["jupyter"] = {"source_hidden": True}
+            cells.append(cell)
     cells.append(timer_end_cell())
     for i, cell in enumerate(cells):
         cell.id = f"cell-{i:03d}"   # deterministic ids, so rebuilding gives the same file
