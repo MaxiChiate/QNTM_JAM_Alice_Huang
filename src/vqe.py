@@ -6,7 +6,6 @@ from qiskit.primitives import StatevectorEstimator
 def optimize(problem: dict, ansatz: "QuantumCircuit", 
              theta0=None, method: str = "L-BFGS-B") -> dict:
     """Minimiza <H> con statevector exacto.
-
     Devuelve {"theta": ndarray, "e_exact": float, "n_iters": int}.
     """
     est = StatevectorEstimator()
