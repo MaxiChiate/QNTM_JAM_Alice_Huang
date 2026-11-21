@@ -18,7 +18,21 @@ El problema se corta en tres piezas con una **interfaz fija** entre ellas. Cada 
 | `notebooks/gonza_*.ipynb` | Gonza (pruebas propias) |
 | `notebooks/fede_*.ipynb` | Fede (pruebas propias) |
 | `notebooks/maxi_*.ipynb` | Maxi (pruebas propias) |
-| `notebooks/final.ipynb` | Maxi lo arma; los demás le pasan celdas |
+| `notebooks/narrative/*.md` | cada uno escribe el texto de su sección |
+| `tools/build_notebook.py` → `notebooks/final.ipynb` | Maxi (el `.ipynb` final se genera, no se edita a mano) |
+
+### La entrega es UN notebook de Colab autocontenido
+
+El jurado abre el notebook en Colab desde la carpeta de Drive y lo corre de punta a punta. **No tiene el repo ni `src/`**, así que el notebook final **no puede hacer `import` de nuestros `.py`**.
+
+- Los `.py` son **solo para desarrollar** sin conflictos de git.
+- El notebook final se **genera** con `tools/build_notebook.py`, que mete el contenido de cada `src/*.py` en celdas de código, intercaladas con las celdas de texto de `notebooks/narrative/*.md`. Así hay una sola fuente de verdad y nadie copia y pega a mano.
+- Reglas para que esto funcione:
+  - Cada `.py` importa solo librerías externas (`qiskit`, `pyscf`, `numpy`...), **nunca** `from src.x import ...`. En el notebook todo queda en el mismo namespace.
+  - El orden de las celdas es el de las dependencias: `hamiltonian.py` → `ansatz.py` → `vqe.py` → `measurement.py` → `analysis.py`.
+  - `ruido.py` también se pega como celda, o se descarga en la celda de instalación si los organizadores lo publican con una URL.
+  - Nada de rutas locales. Si se cachean resultados (θ óptimos), el cache va **dentro del notebook** (un dict en una celda) o se recalcula. Lo más seguro es que el notebook recalcule todo.
+- **El tiempo de ejecución en Colab importa**: optimizar 12 a 15 puntos más las mediciones tiene que terminar en un tiempo razonable en el runtime gratis. Midan cuánto tarda cada pieza desde el principio.
 
 **Reglas de git**:
 - Una rama por persona (`gonza/...`, `fede/...`, `maxi/...`) y PR a `main`.
@@ -64,7 +78,7 @@ Los resultados de cada punto se guardan en `results/<kind>_d<d>.json` (θ óptim
 
 ## Fase 0: los tres juntos (~1 h)
 
-- [ ] Instalar el entorno local: `pip install qiskit qiskit-aer pyscf qiskit-nature` (más lo que pida `ruido.py`). Probar que corra `import pyscf, qiskit_aer`.
+- [ ] Instalar el entorno local: `pip install qiskit qiskit-aer pyscf qiskit-nature` (más lo que pida `ruido.py`). Probar que corra `import pyscf, qiskit_aer`. **Anotar las versiones exactas** (`pip freeze`) para fijarlas en la celda de instalación de Colab, así el jurado corre lo mismo que nosotros.
 - [ ] Conseguir `ruido.py` de los organizadores y guardarlo en `src/`.
 - [ ] Crear la estructura `src/`, `notebooks/`, `results/` y los archivos con las **firmas vacías** de arriba (stubs que devuelvan `NotImplemented`). A partir de acá cada uno trabaja en lo suyo.
 - [ ] Leer juntos las secciones 0, 4 y 8 de [theory_notes.md](theory_notes.md).
@@ -117,7 +131,9 @@ Para empezar sin esperar a nadie: probar con un circuito cualquiera de 8 qubits 
 3. [ ] Reparto de shots: comparar un reparto uniforme contra uno proporcional a $|c_k|$. Calcular **cuántos shots hacen falta para $\sigma < 1$ mHa**.
 4. [ ] Indicadores de confiabilidad: medir con el mismo código $\langle N\rangle$, $\langle S^2\rangle$ y la varianza $\langle H^2\rangle - \langle H\rangle^2$ (sección 11 del apunte).
 5. [ ] `analysis.py`: a partir de `results/`, armar la tabla ($d$, $E$, $\sigma$, shots, `cz`), el gráfico de la curva con barras de error contra CCSD y FCI, el gráfico de error en mHa, el ajuste de $R_e$ (parábola o spline alrededor del mínimo), $D_e$ y el chequeo $|E-E_\text{FCI}|+\sigma < |E_\text{CCSD}-E_\text{FCI}|$ para $d \ge 1{,}8$.
-6. [ ] Esqueleto de `notebooks/final.ipynb` para Colab: celda de instalación y las secciones vacías donde van las celdas de cada uno. Probarlo en Colab de punta a punta lo antes posible, aunque sea con datos falsos.
+6. [ ] `tools/build_notebook.py` (con `nbformat`): genera `notebooks/final.ipynb` con la celda de instalación (`!pip install qiskit qiskit-aer pyscf ...` con versiones fijadas), el código de cada `src/*.py` en orden y las celdas de texto de `notebooks/narrative/`.
+7. [ ] **Probarlo en Colab de verdad lo antes posible**, aunque sea con los stubs: subir el `.ipynb` generado, `Entorno de ejecución > Reiniciar y ejecutar todo`, y anotar el tiempo total. Repetirlo cada vez que se integra algo grande.
+8. [ ] Al final: carpeta de Google Drive compartida con el jurado, con el notebook dentro y probado desde esa copia.
 
 **Después (extras)**: curva con el ruido de `ruido.py`, y ZNE más mitigación de readout.
 
