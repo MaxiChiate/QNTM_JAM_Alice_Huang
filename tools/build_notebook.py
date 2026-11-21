@@ -53,7 +53,7 @@ SECTIONS = [
 ]
 
 # Ansatz whose curve the notebook measures, and the shot budgets per point.
-FINAL_KIND = "uccsd_tap"
+FINAL_KIND = "uccsd2_tap"
 TOTAL_SHOTS = 5_000_000
 RELIABILITY_SHOTS = 1_000_000
 RESULTS_DIR = os.path.join(ROOT, "results")
