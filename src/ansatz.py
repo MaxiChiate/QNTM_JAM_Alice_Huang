@@ -2,7 +2,7 @@
 # qubits 0..norb-1 = spin-orbitales alfa, norb..2norb-1 = beta.
 from qiskit import QuantumCircuit, transpile
 from qiskit.transpiler import CouplingMap
-from qiskit_nature.second_q.circuit.library import UCCSD
+from qiskit_nature.second_q.circuit.library import PUCCD, UCCSD
 from qiskit_nature.second_q.mappers import JordanWignerMapper
 
 
@@ -19,22 +19,32 @@ def _hf_circuit(problem):
     return qc
 
 
-def build_ansatz(problem: dict, kind: str) -> QuantumCircuit:
-    """kind: 'hf' (solo HF, sin parámetros) o 'uccsd' (UCCSD, parte de HF)."""
+def build_ansatz(problem: dict, kind: str, k: int = 1) -> QuantumCircuit:
+    """kind: 'hf' (solo HF), 'uccsd', 'uccgsd' (UCCSD generalizado) o 'kupccgsd'. Parten de HF.
+    k = cuántas veces se repite el bloque (no aplica a 'hf')."""
     hf = _hf_circuit(problem)  # el circuito inicia en el estado de Hartree-Fock
     if kind == "hf":
         return hf
-    if kind != "uccsd":
-        raise ValueError(f"ansatz inválido: {kind!r}")
 
-    # Orbitales espaciales y electrones alfa/beta, leídos del estado HF
+    # Orbitales espaciales y electrones alfa/beta leídos del estado HF
     norb = problem["n_qubits"] // 2
     n_alpha = sum(q < norb for q in _occupied(problem))
     n_beta = len(_occupied(problem)) - n_alpha
-    uccsd = UCCSD(norb, (n_alpha, n_beta), JordanWignerMapper(), initial_state=hf)
+    args = (norb, (n_alpha, n_beta), JordanWignerMapper())
 
-    # Se descompone en compuertas básicas una sola vez para que simular sea rápido.
-    return transpile(uccsd, basis_gates=["cx", "rz", "sx", "x"], optimization_level=1, seed_transpiler=0)
+    if kind == "uccsd":
+        ansatz = UCCSD(*args, reps=k, initial_state=hf)
+    elif kind == "uccgsd":
+        # Saltos entre cualquier par de orbitales (incluye ocupados a vacíos)
+        ansatz = UCCSD(*args, reps=k, generalized=True, initial_state=hf)
+    elif kind == "kupccgsd":
+        # Dobles en pares (alfa y beta juntos) y simples, entre todos los orbitales, repetido k veces
+        ansatz = PUCCD(*args, reps=k, include_singles=(True, True), generalized=True, initial_state=hf)
+    else:
+        raise ValueError(f"ansatz inválido: {kind!r}")
+
+    # Se descompone en compuertas para simular rápido.
+    return transpile(ansatz, basis_gates=["cx", "rz", "sx", "x"], optimization_level=1, seed_transpiler=0)
 
 
 def count_cz(circuit: QuantumCircuit) -> int:
