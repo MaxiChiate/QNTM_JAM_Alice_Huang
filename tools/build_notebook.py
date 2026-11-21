@@ -22,6 +22,8 @@ left to Colab's preinstalled versions: pinning them forces a runtime restart.
 """
 import argparse
 import ast
+import glob
+import json
 import os
 import sys
 from importlib.metadata import PackageNotFoundError, version
@@ -45,9 +47,16 @@ SECTIONS = [
     ("30_vqe", "src/vqe.py"),
     ("40_measurement", "src/measurement.py"),
     ("50_analysis", "src/analysis.py"),
-    ("60_pipeline", "src/pipeline.py"),   # optional: runs the whole curve and the report
+    ("60_pipeline", "src/pipeline.py"),
+    ("70_results", "RUN"),                # generated: θ cache + measure the curve + report
     ("90_conclusions", None),
 ]
+
+# Ansatz whose curve the notebook measures, and the shot budgets per point.
+FINAL_KIND = "uccsd_tap"
+TOTAL_SHOTS = 5_000_000
+RELIABILITY_SHOTS = 1_000_000
+RESULTS_DIR = os.path.join(ROOT, "results")
 
 MARKDOWN_SPLIT = "<!-- cell -->"
 CODE_SPLIT = "# %%"
@@ -74,6 +83,42 @@ def timer_end_cell():
     return new_code_cell(
         'print(f"Tiempo total de ejecución: {(time.time() - _notebook_t0) / 60:.1f} min")'
     )
+
+
+def theta_cache_cell(kind: str):
+    """Fede's optimal θ (and their exact energies) embedded in the notebook: Colab has no results/."""
+    points = {}
+    for path in sorted(glob.glob(os.path.join(RESULTS_DIR, f"{kind}_d*.json"))):
+        with open(path) as f:
+            row = json.load(f)
+        if row.get("kind") == kind:
+            points[float(row["d"])] = {"theta": row["theta"], "e_exact": row["e_exact"]}
+    if not points:
+        sys.exit(f"no results/{kind}_d*.json files to embed")
+    lines = [f"# θ óptimos de {kind} (optimización con statevector, generado desde results/{kind}_d*.json)",
+             f"FINAL_KIND = {kind!r}", "POINTS = {"]
+    for d in sorted(points):
+        theta = ", ".join(repr(round(t, 12)) for t in points[d]["theta"])
+        lines.append(f"    {d!r}: {{\"e_exact\": {points[d]['e_exact']!r}, \"theta\": [{theta}]}},")
+    lines.append("}")
+    return new_code_cell("\n".join(lines))
+
+
+def run_cells():
+    return [
+        theta_cache_cell(FINAL_KIND),
+        new_code_cell(f"TOTAL_SHOTS = {TOTAL_SHOTS:_}\nRELIABILITY_SHOTS = {RELIABILITY_SHOTS:_}\n\n"
+                      "records = measure_curve(FINAL_KIND, POINTS, TOTAL_SHOTS, reliability_shots=RELIABILITY_SHOTS)\n"
+                      "out = report(records)"),
+        new_code_cell('out["table"]'),
+        new_code_cell('out["figure"]'),
+        new_code_cell('out["summary"]'),
+        new_code_cell('check = out["beats_ccsd"]\n'
+                      'print("le gana a CCSD en todos los puntos con d ≥ 1,8 Å:", check["all_ok"])\n'
+                      'print("precisión química en esa zona:", check["all_chemical_accuracy"])\n'
+                      'pd.DataFrame(check["points"])'),
+        new_code_cell("reliability_table(records)"),
+    ]
 
 
 def strip_main_blocks(code: str) -> str:
@@ -110,6 +155,9 @@ def build() -> nbformat.NotebookNode:
             with open(md_path, encoding="utf-8") as f:
                 cells += [new_markdown_cell(c) for c in split_cells(f.read(), MARKDOWN_SPLIT)]
         if source is None:
+            continue
+        if source == "RUN":
+            cells += run_cells()
             continue
         src_path = os.path.join(ROOT, source)
         if not os.path.exists(src_path):
