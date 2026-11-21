@@ -55,6 +55,7 @@ SECTIONS = [
 # Ansatz whose curve the notebook measures, and the shot budgets per point.
 FINAL_KIND = "uccsd2_tap"
 TOTAL_SHOTS = 5_000_000
+STRETCHED_SHOTS = 30_000_000   # d >= 1.8 Å: σ ≈ 0.5 mHa, so chemical accuracy does not hinge on the seed
 RELIABILITY_SHOTS = 1_000_000
 RESULTS_DIR = os.path.join(ROOT, "results")
 
@@ -107,8 +108,10 @@ def theta_cache_cell(kind: str):
 def run_cells():
     return [
         theta_cache_cell(FINAL_KIND),
-        new_code_cell(f"TOTAL_SHOTS = {TOTAL_SHOTS:_}\nRELIABILITY_SHOTS = {RELIABILITY_SHOTS:_}\n\n"
-                      "records = measure_curve(FINAL_KIND, POINTS, TOTAL_SHOTS, reliability_shots=RELIABILITY_SHOTS)\n"
+        new_code_cell(f"TOTAL_SHOTS = {TOTAL_SHOTS:_}\nSTRETCHED_SHOTS = {STRETCHED_SHOTS:_}   # d ≥ 1,8 Å\n"
+                      f"RELIABILITY_SHOTS = {RELIABILITY_SHOTS:_}\n\n"
+                      "records = measure_curve(FINAL_KIND, POINTS, TOTAL_SHOTS, reliability_shots=RELIABILITY_SHOTS,\n"
+                      "                        stretched_shots=STRETCHED_SHOTS)\n"
                       "out = report(records)"),
         new_code_cell('out["table"]'),
         new_code_cell('out["figure"]'),

@@ -30,7 +30,7 @@ import time
 import numpy as np
 from qiskit.quantum_info import Statevector
 
-_KIND_PATTERN = re.compile(r"^(uccsd|uccgsd|kupccgsd)(\d*)(_tap)?$")
+_KIND_PATTERN = re.compile(r"^(uccsd|uccgsd|kupccgsd)(\d*)(_tap)?(_p\d+)?$")   # _p<n>: pruned to n excitations
 ALIGN_TOLERANCE = 1e-6   # Ha
 
 
@@ -43,22 +43,33 @@ def parse_kind(name: str):
 
 
 def load_points(name: str, results_dir: str = "results") -> dict:
-    """{d: {"theta", "e_exact"}} from Fede's results/<name>_d<d>.json files."""
+    """{d: {"theta", "e_exact"[, "excitations"]}} from Fede's results/<name>_d<d>.json files.
+
+    Pruned ansätze (tools/run_prune.py) also store the excitations they kept."""
     points = {}
     for path in glob.glob(os.path.join(results_dir, f"{name}_d*.json")):
         with open(path) as f:
             row = json.load(f)
         if row.get("kind") == name:
             points[float(row["d"])] = {"theta": list(row["theta"]), "e_exact": float(row["e_exact"])}
+            if "excitations" in row:
+                points[float(row["d"])]["excitations"] = row["excitations"]
     return dict(sorted(points.items()))
 
 
-def prepare_point(d: float, name: str):
-    """(problem, ansatz) for distance d, exactly as vqe.sweep built them."""
+def _as_excitations(excitations):
+    """JSON lists back to the ((occupied...), (virtual...)) tuples that qiskit-nature's UCC expects."""
+    return [(tuple(occ), tuple(virt)) for occ, virt in excitations]
+
+
+def prepare_point(d: float, name: str, excitations=None):
+    """(problem, ansatz) for distance d, exactly as vqe.sweep (or run_prune.py, with excitations) built them."""
     kind, k, taper = parse_kind(name)
     problem = build_problem(d)
     if taper:
         problem = taper_problem(problem)
+    if excitations is not None:
+        return problem, build_ansatz(problem, "custom", excitations=_as_excitations(excitations))
     return problem, build_ansatz(problem, kind, k)
 
 
@@ -66,17 +77,21 @@ def _exact_energy(ansatz, theta, hamiltonian):
     return float(Statevector(ansatz.assign_parameters(theta)).expectation_value(hamiltonian).real)
 
 
-def align_theta(problem: dict, ansatz, name: str, theta, e_exact: float):
+def align_theta(problem: dict, ansatz, name: str, theta, e_exact: float, excitations=None):
     """Return (θ, sign pattern) such that the exact energy of the ansatz matches e_exact.
 
     Each parameter belongs to one excitation (the list repeats once per rep); its
     sign changes by the product of the signs of the spatial orbitals it touches.
+    A pruned ansatz passes its own excitations (one per parameter, no repetition).
     Raises if no pattern reproduces e_exact, which would mean something other than
     orbital signs changed.
     """
     kind, k, _ = parse_kind(name)
     theta = np.asarray(theta, dtype=float)
-    excitations = excitation_list(problem, kind, k)
+    if excitations is None:
+        excitations = excitation_list(problem, kind, k)
+    else:
+        excitations, k = _as_excitations(excitations), 1
     if len(theta) != k * len(excitations):
         raise ValueError(f"θ has {len(theta)} values, expected {k} x {len(excitations)} excitations")
     n_orb = problem.get("num_spatial_orbitals", problem["n_qubits"] // 2)
@@ -106,8 +121,8 @@ def measure_point(d: float, name: str, point: dict, total_shots: int, seed: int 
     `point` is {"theta", "e_exact"}. With reliability_shots > 0 it also measures
     <N>, <S²> and Var(H) (theory notes, section 11), stored under "reliability".
     """
-    problem, ansatz = prepare_point(d, name)
-    theta, signs = align_theta(problem, ansatz, name, point["theta"], point["e_exact"])
+    problem, ansatz = prepare_point(d, name, point.get("excitations"))
+    theta, signs = align_theta(problem, ansatz, name, point["theta"], point["e_exact"], point.get("excitations"))
     t0 = time.time()
     m = measure_energy(ansatz, theta, problem["hamiltonian"], total_shots,
                        allocation=allocation, seed=seed)
@@ -123,12 +138,18 @@ def measure_point(d: float, name: str, point: dict, total_shots: int, seed: int 
 
 def measure_curve(name: str, points: dict, total_shots: int, seed: int = 0,
                   reliability_shots: int = 0, allocation: str = "weighted",
-                  verbose: bool = True) -> list:
-    """measure_point for every d in `points`; seeds seed, seed+10, ... per point."""
+                  verbose: bool = True, stretched_shots: int = None) -> list:
+    """measure_point for every d in `points`; seeds seed, seed+10, ... per point.
+
+    stretched_shots: budget for d >= D_STRETCHED instead of total_shots. There the
+    state is exact and σ is all the error left, so σ has to sit well below 1,6 mHa
+    for chemical accuracy not to depend on the seed (σ ∝ 1/√shots).
+    """
     records = []
     for i, (d, point) in enumerate(sorted(points.items())):
         t0 = time.time()
-        rec = measure_point(d, name, point, total_shots, seed + 10 * i, reliability_shots, allocation)
+        shots = stretched_shots if stretched_shots and d >= D_STRETCHED else total_shots
+        rec = measure_point(d, name, point, shots, seed + 10 * i, reliability_shots, allocation)
         records.append(rec)
         if verbose:
             err = 1e3 * abs(rec["energy"] - rec["e_fci"])
